@@ -1,4 +1,4 @@
-const { effectMiddleware, call, all, spawn, delay } = require('./effect');
+const { effectMiddleware, call, all, spawn, delay, cancel } = require('./effect');
 const factoryBase = require('./factory');
 
 const task = factoryBase(effectMiddleware);
@@ -13,4 +13,5 @@ module.exports = {
   factoryBase,
   spawn,
   task,
+  cancel,
 };

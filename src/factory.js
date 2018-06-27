@@ -16,6 +16,12 @@ function applyMiddleware(middlewares, ctx) {
 }
 
 function factoryBase(...middleware) {
+  function autoInc(seed = 0) {
+    return () => ++seed;
+  }
+
+  const uid = autoInc();
+  const tasks = {};
   /**
    * Execute the generator function or a generator
    * and return a promise.
@@ -65,8 +71,11 @@ function factoryBase(...middleware) {
     // which leads to memory leak errors.
     // see https://github.com/tj/co/issues/180
     return new Promise((resolve, reject) => {
+      const runtimeId = uid();
+
       if (typeof gen === 'function') {
         gen = gen.apply(ctx, args);
+        tasks[runtimeId] = gen;
       }
 
       if (!gen || typeof gen.next !== 'function') {
@@ -107,10 +116,22 @@ function factoryBase(...middleware) {
       function next(ret) {
         const value = ret.value;
         if (ret.done) {
+          delete tasks[runtimeId];
           return resolve(value);
         }
 
-        const taskValue = applyMiddleware(middleware)(value, promisify);
+        const onCancel = (taskId) => {
+          console.log('CANCEL');
+
+          try {
+            tasks[taskId].throw('Task cancelled');
+          } catch (e) {
+            reject(e);
+          }
+
+          delete tasks[runtimeId];
+        };
+        const taskValue = applyMiddleware(middleware)(value, promisify, runtimeId, onCancel);
         const promiseValue = promisify.call(ctx, taskValue);
 
         if (promiseValue && isPromise(promiseValue)) {

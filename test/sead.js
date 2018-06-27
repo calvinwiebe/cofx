@@ -147,21 +147,17 @@ test('custom middleware', (t) => {
   customTask(genCustom);
 });
 
-/* function* sp() {
-  const resp = yield call(fetch, 'http://httpbin.org/get');
-  const json = yield call([resp, 'json']);
-  console.log(json);
+function* sp() {
+  yield delay(5000);
+  // const resp = yield call(fetch, 'http://httpbin.org/get');
+  // const json = yield call([resp, 'json']);
+  // console.log(json);
 }
 
 function* example() {
-  const resp = yield all([
-    call(fetch, 'http://httpbin.org/get'),
-    call(fetch, 'http://httpbin.org/get'),
-  ]);
-  const data = yield all(resp.map((r) => call([r, 'json'])));
-  yield spawn(sp);
-  // return data;
+  const task = yield spawn(sp);
+  yield delay(500);
+  yield cancel(task);
 }
 
 task(example).then(console.log);
-*/
