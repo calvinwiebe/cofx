@@ -11,12 +11,16 @@ function* sp() {
 }
 
 function* example() {
-  const task = yield spawn(sp);
-  console.log('task: ', task);
-  yield delay(500);
-  console.log('SHORT DELAY');
-  yield cancel(task);
-  console.log('HIT');
+  try {
+    const task = yield spawn(sp);
+    console.log('task: ', task);
+    yield delay(500);
+    console.log('SHORT DELAY');
+    yield cancel(task);
+    console.log('HIT');
+  } catch (err) {
+    console.log('LAST', err);
+  }
 }
 
 task(example);

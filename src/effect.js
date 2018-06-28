@@ -41,10 +41,9 @@ function allEffect({ effects }, promisify) {
 const SPAWN = 'SPAWN';
 const spawn = (fn, ...args) => ({ type: SPAWN, fn, args });
 const isSpawn = typeDetector(SPAWN);
-function spawnEffect({ fn, args }, promisify, taskId) {
+function spawnEffect({ fn, args }, addTask) {
   return new Promise((resolve, reject) => {
-    promisify(fn.call(this, ...args)).then(noop);
-    resolve(taskId);
+    resolve(addTask(fn, ...args).id);
   });
 }
 
@@ -52,9 +51,13 @@ const DELAY = 'DELAY';
 const delay = (ms) => ({ type: DELAY, ms });
 const isDelay = typeDetector(DELAY);
 function delayEffect({ ms }) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => { resolve(); }, ms);
+  let timeoutId;
+  const promise = new Promise((resolve, reject) => {
+    timeoutId = setTimeout(() => { resolve(); }, ms);
   });
+
+  promise.cancel = () => clearTimeout(timeoutId);
+  return promise;
 }
 
 const CANCEL = 'CANCEL';
@@ -65,11 +68,11 @@ function cancelEffect({ taskId }, cancel) {
   return Promise.resolve(taskId);
 }
 
-function effectHandler(effect, promisify, taskId, cancel) {
+function effectHandler(effect, promisify, addTask, cancel) {
   const ctx = this;
   if (isCall(effect)) return callEffect.call(ctx, effect);
   if (isAll(effect)) return allEffect.call(ctx, effect, promisify);
-  if (isSpawn(effect)) return spawnEffect.call(ctx, effect, promisify, taskId);
+  if (isSpawn(effect)) return spawnEffect.call(ctx, effect, addTask);
   if (isDelay(effect)) return delayEffect.call(ctx, effect);
   if (isCancel(effect)) return cancelEffect.call(ctx, effect, cancel);
   return effect;

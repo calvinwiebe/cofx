@@ -6,6 +6,7 @@ const {
 } = require('./is');
 
 const slice = Array.prototype.slice;
+const TASK = 'TASK';
 
 function applyMiddleware(middlewares, ctx) {
   return (...args) => {
@@ -19,15 +20,88 @@ function factoryBase(...middleware) {
   function autoInc(seed = 0) {
     return () => ++seed;
   }
-
   const uid = autoInc();
-  const tasks = {};
   /**
    * Execute the generator function or a generator
    * and return a promise.
    */
   return function runtime(gen, ...args) {
+    const tasks = {};
     const ctx = this;
+    const runtimeId = uid();
+
+    if (typeof gen === 'function') {
+      gen = gen.apply(ctx, args);
+    }
+
+    const task = {
+      [TASK]: true,
+      id: runtimeId,
+      iterator: gen,
+      cancel: onRejected,
+    };
+
+    tasks[runtimeId] = task;
+
+    onFulfilled(); // kickstart generator
+
+    function onFulfilled(res) {
+      const ret = gen.next(res);
+      next(ret);
+      return null;
+    }
+
+    function onRejected(err) {
+      const ret = gen.throw(err);
+      next(ret);
+    }
+
+    function addTask(fn, ...taskArgs) {
+      const taskGen = runtime(fn, ...taskArgs);
+      tasks[taskGen.id] = taskGen;
+      return taskGen;
+    }
+
+    function cancel(taskId) {
+      console.log('TRYING TO CANCEL');
+      const t = tasks[taskId];
+      t.cancel('Task cancelled');
+      console.log(t);
+      delete tasks[taskId];
+    }
+
+    /**
+     * Get the next value in the generator,
+     * return a promise.
+     */
+    function next(ret) {
+      const value = ret.value;
+      if (ret.done) {
+        delete tasks[runtimeId];
+        return value;
+      }
+
+      const taskValue = applyMiddleware(middleware)(value, promisify, addTask, cancel);
+      const promiseValue = promisify.call(ctx, taskValue);
+
+      if (promiseValue && isPromise(promiseValue)) {
+        if (typeof promiseValue.cancel === 'function') {
+          const nextCancel = ((prevCancel) => (err) => {
+            promiseValue.cancel();
+            prevCancel(err);
+          })(tasks[runtimeId].cancel);
+
+          tasks[runtimeId].cancel = nextCancel;
+        }
+
+        return promiseValue.then(onFulfilled, onRejected);
+      }
+
+      const msg = `You may only yield a function, promise, generator, array, or`
+        + ` object, but the following object was passed: "${String(ret.value)}"`;
+
+      return onRejected(new TypeError(msg));
+    }
 
     function promisify(obj) {
       if (!obj) return obj;
@@ -67,83 +141,7 @@ function factoryBase(...middleware) {
       }
     }
 
-    // we wrap everything in a promise to avoid promise chaining,
-    // which leads to memory leak errors.
-    // see https://github.com/tj/co/issues/180
-    return new Promise((resolve, reject) => {
-      const runtimeId = uid();
-
-      if (typeof gen === 'function') {
-        gen = gen.apply(ctx, args);
-        tasks[runtimeId] = gen;
-      }
-
-      if (!gen || typeof gen.next !== 'function') {
-        return resolve(gen);
-      }
-
-      onFulfilled(); // kickstart generator
-
-      function onFulfilled(res) {
-        var ret;
-
-        try {
-          ret = gen.next(res);
-        } catch (e) {
-          return reject(e);
-        }
-
-        next(ret);
-        return null;
-      }
-
-      function onRejected(err) {
-        var ret;
-
-        try {
-          ret = gen.throw(err);
-        } catch (e) {
-          return reject(e);
-        }
-
-        next(ret);
-      }
-
-      /**
-       * Get the next value in the generator,
-       * return a promise.
-       */
-      function next(ret) {
-        const value = ret.value;
-        if (ret.done) {
-          delete tasks[runtimeId];
-          return resolve(value);
-        }
-
-        const onCancel = (taskId) => {
-          console.log('CANCEL');
-
-          try {
-            tasks[taskId].throw('Task cancelled');
-          } catch (e) {
-            reject(e);
-          }
-
-          delete tasks[runtimeId];
-        };
-        const taskValue = applyMiddleware(middleware)(value, promisify, runtimeId, onCancel);
-        const promiseValue = promisify.call(ctx, taskValue);
-
-        if (promiseValue && isPromise(promiseValue)) {
-          return promiseValue.then(onFulfilled, onRejected);
-        }
-
-        const msg = `You may only yield a function, promise, generator, array, or`
-          + ` object, but the following object was passed: "${String(ret.value)}"`;
-
-        return onRejected(new TypeError(msg));
-      }
-    });
+    return task;
   }
 }
 
