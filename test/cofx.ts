@@ -103,6 +103,24 @@ test('task runtime all effect object', (t) => {
   });
 });
 
+test('task runtime cancel', (t) => {
+  t.plan(1);
+
+  function* one() {
+    try {
+      yield delay(10000);
+      return 'hi';
+    } catch (err) {
+      console.log('HIT');
+      t.equal(true, true);
+    }
+  }
+
+  const g = task(one);
+  g.catch(console.log);
+  (g as any).cancel();
+});
+
 test('call effect', (t) => {
   t.plan(1);
 

@@ -7,7 +7,10 @@ import {
   DelayEffect,
   NextFn,
   AllEffects,
+  CancellablePromise,
 } from './types';
+
+type Fn = (...args: any[]) => void;
 
 const noop = () => {};
 const typeDetector = (type: string) => (value: any) =>
@@ -20,18 +23,38 @@ const call = (fn: CoFn | any[], ...args: any[]): CallEffect => ({
   args,
 });
 const isCall = typeDetector(CALL);
-function callEffect({ fn, args }: { fn: CoFn; args: any[] }) {
-  if (Array.isArray(fn)) {
-    const [obj, fnName, ...fargs] = fn;
-    return obj[fnName](...fargs);
-  }
+function callEffect(
+  { fn, args }: { fn: CoFn; args: any[] },
+  promisify: Promisify,
+) {
+  let cancel: () => void = null;
+  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
+    if (Array.isArray(fn)) {
+      const [obj, fnName, ...fargs] = fn;
+      return resolve(obj[fnName](...fargs));
+    }
 
-  const gen = fn.call(this, ...args);
-  if (!gen || typeof gen.next !== 'function') {
-    return Promise.resolve(gen);
-  }
+    const gen = fn.call(this, ...args);
 
-  return gen;
+    cancel = () => {
+      const msg = 'call has been cancelled';
+      if (typeof gen.next === 'function') {
+        gen.throws(msg);
+      }
+      reject(msg);
+    };
+
+    if (!gen || typeof gen.next !== 'function') {
+      return resolve(gen);
+    }
+
+    promisify(gen)
+      .then(resolve)
+      .catch(reject);
+  });
+
+  (promise as any).cancel = cancel;
+  return promise;
 }
 
 const ALL = 'ALL';
@@ -111,26 +134,44 @@ function spawnEffect(
   { fn, args }: { fn: CoFn; args: any[] },
   promisify: Promisify,
 ) {
-  return new Promise((resolve, reject) => {
+  let cancel: Fn = null;
+
+  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
     promisify(fn.call(this, ...args)).then(noop);
     resolve();
+    cancel = () => {
+      reject('spawn has been cancelled');
+    };
   });
+
+  promise.cancel = cancel;
+  return promise;
 }
 
 const DELAY = 'DELAY';
 const delay = (ms: number): DelayEffect => ({ type: DELAY, ms });
 const isDelay = typeDetector(DELAY);
 function delayEffect({ ms }: { ms: number }) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
+  let cancel: Fn = null;
+
+  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
+    const timerId = setTimeout(() => {
       resolve();
     }, ms);
+
+    cancel = () => {
+      clearTimeout(timerId);
+      reject('delay has been cancelled.');
+    };
   });
+
+  promise.cancel = cancel;
+  return promise;
 }
 
 function effectHandler(effect: Effect, promisify: Promisify) {
   const ctx = this;
-  if (isCall(effect)) return callEffect.call(ctx, effect);
+  if (isCall(effect)) return callEffect.call(ctx, effect, promisify);
   if (isAll(effect)) return allEffect.call(ctx, effect, promisify);
   if (isRace(effect)) return raceEffect.call(ctx, effect, promisify);
   if (isSpawn(effect)) return spawnEffect.call(ctx, effect, promisify);

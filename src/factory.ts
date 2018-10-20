@@ -1,5 +1,11 @@
 import { isPromise, isGenerator, isGeneratorFunction, isObject } from './is';
-import { Middleware, Promisify, NextFn, CoFn } from './types';
+import {
+  Middleware,
+  Promisify,
+  NextFn,
+  CoFn,
+  CancellablePromise,
+} from './types';
 
 function applyMiddleware(middlewares: Middleware[], ctx: any) {
   return (value: any, promisify: Promisify) => {
@@ -63,15 +69,29 @@ function factoryBase(...middleware: Middleware[]) {
       }
     }
 
+    let cancel: () => void = null;
+    let cancels: any = [];
     // we wrap everything in a promise to avoid promise chaining,
     // which leads to memory leak errors.
     // see https://github.com/tj/co/issues/180
-    return new Promise((resolve, reject) => {
+    const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
       const iter = typeof gen === 'function' ? gen.apply(ctx, args) : gen;
-
       if (!iter || typeof iter.next !== 'function') {
         return resolve(iter);
       }
+
+      cancel = () => {
+        try {
+          iter.throw('1 generator was cancelled');
+          cancels.forEach((fn: () => void) => {
+            fn();
+          });
+          cancels = [];
+          reject({ error: '2 generator was cancelled' });
+        } catch (err) {
+          reject(err);
+        }
+      };
 
       onFulfilled(); // kickstart generator
 
@@ -101,11 +121,16 @@ function factoryBase(...middleware: Middleware[]) {
       function next(ret: any) {
         const value = ret.value;
         if (ret.done) {
+          cancels = [];
           return resolve(value);
         }
 
         const taskValue = applyMiddleware(middleware, ctx)(value, promisify);
         const promiseValue = promisify.call(ctx, taskValue);
+        if (promiseValue && promiseValue.cancel) {
+          cancels.push(promiseValue.cancel);
+        }
+
         if (promiseValue && isPromise(promiseValue)) {
           return promiseValue.then(onFulfilled, onRejected);
         }
@@ -117,6 +142,9 @@ function factoryBase(...middleware: Middleware[]) {
         return onRejected(new TypeError(msg));
       }
     });
+
+    promise.cancel = cancel;
+    return promise;
   };
 }
 

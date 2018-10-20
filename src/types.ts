@@ -28,3 +28,6 @@ export type Promisify = (p: any) => Promise<any>;
 export type Middleware = (
   next: NextFn,
 ) => (effect: Effect, promisify: Promisify) => Middleware;
+export interface CancellablePromise<T> extends Promise<T> {
+  cancel?: (...args: any[]) => void;
+}
