@@ -7,8 +7,9 @@ import {
   DelayEffect,
   NextFn,
   AllEffects,
-  CancellablePromise,
+  HiddenCancellablePromise,
 } from './types';
+import { cancelSymbol } from './symbol';
 
 type Fn = (...args: any[]) => void;
 
@@ -28,32 +29,34 @@ function callEffect(
   promisify: Promisify,
 ) {
   let cancel: () => void = null;
-  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
-    if (Array.isArray(fn)) {
-      const [obj, fnName, ...fargs] = fn;
-      return resolve(obj[fnName](...fargs));
-    }
-
-    const gen = fn.call(this, ...args);
-
-    cancel = () => {
-      const msg = 'call has been cancelled';
-      if (typeof gen.next === 'function') {
-        gen.throws(msg);
+  const promise: HiddenCancellablePromise<any> = new Promise(
+    (resolve, reject) => {
+      if (Array.isArray(fn)) {
+        const [obj, fnName, ...fargs] = fn;
+        return resolve(obj[fnName](...fargs));
       }
-      reject(msg);
-    };
 
-    if (!gen || typeof gen.next !== 'function') {
-      return resolve(gen);
-    }
+      const gen = fn.call(this, ...args);
 
-    promisify(gen)
-      .then(resolve)
-      .catch(reject);
-  });
+      cancel = () => {
+        const msg = 'call has been cancelled';
+        if (typeof gen.next === 'function') {
+          gen.throws(msg);
+        }
+        reject(msg);
+      };
 
-  (promise as any).cancel = cancel;
+      if (!gen || typeof gen.next !== 'function') {
+        return resolve(gen);
+      }
+
+      promisify(gen)
+        .then(resolve)
+        .catch(reject);
+    },
+  );
+
+  promise[cancelSymbol] = cancel;
   return promise;
 }
 
@@ -69,7 +72,12 @@ function allEffect({ effects }: { effects: AllEffects }, promisify: Promisify) {
   if (Array.isArray(effects)) {
     const mapFn = (effect: Effect) =>
       effectHandler.call(ctx, effect, promisify);
-    return effects.map(mapFn);
+    const eff = effects.map(mapFn);
+    const cancel = () => {
+      eff.forEach((e) => e.cancel());
+    };
+    (eff as any)[cancelSymbol] = cancel;
+    return eff;
   }
 
   if (isObject(effects)) {
@@ -79,7 +87,15 @@ function allEffect({ effects }: { effects: AllEffects }, promisify: Promisify) {
         [key]: effectHandler.call(ctx, effects[key], promisify),
       };
     };
-    return Object.keys(effects).reduce(reduceFn, {});
+    const eff: { [key: string]: any } = Object.keys(effects).reduce(
+      reduceFn,
+      {},
+    );
+    const cancel = () => {
+      Object.keys(eff).forEach((key) => eff[key].cancel());
+    };
+    (eff as any)[cancelSymbol] = cancel;
+    return eff;
   }
 }
 
@@ -136,15 +152,17 @@ function spawnEffect(
 ) {
   let cancel: Fn = null;
 
-  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
-    promisify(fn.call(this, ...args)).then(noop);
-    resolve();
-    cancel = () => {
-      reject('spawn has been cancelled');
-    };
-  });
+  const promise: HiddenCancellablePromise<any> = new Promise(
+    (resolve, reject) => {
+      promisify(fn.call(this, ...args)).then(noop);
+      resolve();
+      cancel = () => {
+        reject('spawn has been cancelled');
+      };
+    },
+  );
 
-  promise.cancel = cancel;
+  promise[cancelSymbol] = cancel;
   return promise;
 }
 
@@ -154,18 +172,20 @@ const isDelay = typeDetector(DELAY);
 function delayEffect({ ms }: { ms: number }) {
   let cancel: Fn = null;
 
-  const promise: CancellablePromise<any> = new Promise((resolve, reject) => {
-    const timerId = setTimeout(() => {
-      resolve();
-    }, ms);
+  const promise: HiddenCancellablePromise<any> = new Promise(
+    (resolve, reject) => {
+      const timerId = setTimeout(() => {
+        resolve();
+      }, ms);
 
-    cancel = () => {
-      clearTimeout(timerId);
-      reject('delay has been cancelled.');
-    };
-  });
+      cancel = () => {
+        clearTimeout(timerId);
+        reject('delay has been cancelled.');
+      };
+    },
+  );
 
-  promise.cancel = cancel;
+  promise[cancelSymbol] = cancel;
   return promise;
 }
 

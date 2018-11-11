@@ -6,6 +6,7 @@ import {
   CoFn,
   CancellablePromise,
 } from './types';
+import { cancelSymbol } from './symbol';
 
 function applyMiddleware(middlewares: Middleware[], ctx: any) {
   return (value: any, promisify: Promisify) => {
@@ -127,8 +128,8 @@ function factoryBase(...middleware: Middleware[]) {
 
         const taskValue = applyMiddleware(middleware, ctx)(value, promisify);
         const promiseValue = promisify.call(ctx, taskValue);
-        if (promiseValue && promiseValue.cancel) {
-          cancels.push(promiseValue.cancel);
+        if (promiseValue && promiseValue[cancelSymbol]) {
+          cancels.push(promiseValue[cancelSymbol]);
         }
 
         if (promiseValue && isPromise(promiseValue)) {

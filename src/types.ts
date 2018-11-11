@@ -1,3 +1,5 @@
+import { cancelSymbol } from './symbol';
+
 export type Fn = (...args: any[]) => void;
 export type GenFn<V = any> = (...args: any[]) => IterableIterator<V>;
 export type CoFn<V = any> = GenFn<V> | Fn;
@@ -28,6 +30,9 @@ export type Promisify = (p: any) => Promise<any>;
 export type Middleware = (
   next: NextFn,
 ) => (effect: Effect, promisify: Promisify) => Middleware;
+export interface HiddenCancellablePromise<T> extends Promise<T> {
+  [cancelSymbol]?: (...args: any[]) => void;
+}
 export interface CancellablePromise<T> extends Promise<T> {
   cancel?: (...args: any[]) => void;
 }
