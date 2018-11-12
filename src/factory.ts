@@ -5,15 +5,16 @@ import {
   NextFn,
   CoFn,
   CancellablePromise,
+  Fn,
 } from './types';
 import { cancelSymbol } from './symbol';
 
 function applyMiddleware(middlewares: Middleware[], ctx: any) {
-  return (value: any, promisify: Promisify) => {
+  return (value: any, promisify: Promisify, cancel: Promise<any>) => {
     const n = (effect: any) => effect;
     const compose = (acc: NextFn, md: Middleware) => md.call(ctx, acc);
     const chain = middlewares.reduce(compose, n);
-    return chain(value, promisify);
+    return chain(value, promisify, cancel);
   };
 }
 
@@ -70,7 +71,7 @@ function factoryBase(...middleware: Middleware[]) {
       }
     }
 
-    let cancel: () => void = null;
+    let cancel: any = null;
     let cancels: any = [];
     // we wrap everything in a promise to avoid promise chaining,
     // which leads to memory leak errors.
@@ -81,7 +82,7 @@ function factoryBase(...middleware: Middleware[]) {
         return resolve(iter);
       }
 
-      cancel = () => {
+      cancel = (cresolve: Fn) => () => {
         try {
           iter.throw('1 generator was cancelled');
           cancels.forEach((fn: () => void) => {
@@ -92,7 +93,12 @@ function factoryBase(...middleware: Middleware[]) {
         } catch (err) {
           reject(err);
         }
+        cresolve('cancel has been activated');
       };
+
+      const cancelPromise = new Promise((cresolve) => {
+        cancel = cancel(cresolve);
+      });
 
       onFulfilled(); // kickstart generator
 
@@ -126,7 +132,11 @@ function factoryBase(...middleware: Middleware[]) {
           return resolve(value);
         }
 
-        const taskValue = applyMiddleware(middleware, ctx)(value, promisify);
+        const taskValue = applyMiddleware(middleware, ctx)(
+          value,
+          promisify,
+          cancelPromise,
+        );
         const promiseValue = promisify.call(ctx, taskValue);
         if (promiseValue && promiseValue[cancelSymbol]) {
           cancels.push(promiseValue[cancelSymbol]);
