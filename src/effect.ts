@@ -24,6 +24,7 @@ const isCall = typeDetector(CALL);
 function callEffect(
   { fn, args }: { fn: CoFn; args: any[] },
   promisify: Promisify,
+  cancelPromise: Promise<any>,
 ) {
   return speculation((resolve, reject, onCancel) => {
     if (Array.isArray(fn)) {
@@ -48,7 +49,7 @@ function callEffect(
       }
       reject(msg);
     });
-  });
+  }, cancelPromise);
 }
 
 const ALL = 'ALL';
@@ -132,6 +133,7 @@ const isSpawn = typeDetector(SPAWN);
 function spawnEffect(
   { fn, args }: { fn: CoFn; args: any[] },
   promisify: Promisify,
+  cancelPromise: Promise<any>,
 ) {
   return speculation((resolve, reject, onCancel) => {
     promisify(fn.call(this, ...args)).then(noop);
@@ -139,13 +141,13 @@ function spawnEffect(
     onCancel(() => {
       reject('spawn has been cancelled');
     });
-  });
+  }, cancelPromise);
 }
 
 const DELAY = 'DELAY';
 const delay = (ms: number): DelayEffect => ({ type: DELAY, ms });
 const isDelay = typeDetector(DELAY);
-function delayEffect({ ms }: { ms: number }) {
+function delayEffect({ ms }: { ms: number }, cancelPromise: Promise<any>) {
   return speculation((resolve, reject, onCancel) => {
     const timerId = setTimeout(() => {
       resolve();
@@ -155,22 +157,32 @@ function delayEffect({ ms }: { ms: number }) {
       clearTimeout(timerId);
       reject('delay has been cancelled.');
     });
-  });
+  }, cancelPromise);
 }
 
-function effectHandler(effect: Effect, promisify: Promisify) {
+function effectHandler(
+  effect: Effect,
+  promisify: Promisify,
+  cancelPromise: Promise<any>,
+) {
   const ctx = this;
-  if (isCall(effect)) return callEffect.call(ctx, effect, promisify);
+  if (isCall(effect))
+    return callEffect.call(ctx, effect, promisify, cancelPromise);
   if (isAll(effect)) return allEffect.call(ctx, effect, promisify);
   if (isRace(effect)) return raceEffect.call(ctx, effect, promisify);
-  if (isSpawn(effect)) return spawnEffect.call(ctx, effect, promisify);
-  if (isDelay(effect)) return delayEffect.call(ctx, effect);
+  if (isSpawn(effect))
+    return spawnEffect.call(ctx, effect, promisify, cancelPromise);
+  if (isDelay(effect)) return delayEffect.call(ctx, effect, cancelPromise);
   return effect;
 }
 
 function effectMiddleware(next: NextFn) {
-  return (effect: Effect, promisify: Promisify) => {
-    const nextEffect = effectHandler(effect, promisify);
+  return (
+    effect: Effect,
+    promisify: Promisify,
+    cancelPromise: Promise<any>,
+  ) => {
+    const nextEffect = effectHandler(effect, promisify, cancelPromise);
     return next(nextEffect);
   };
 }

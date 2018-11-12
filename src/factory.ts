@@ -7,7 +7,6 @@ import {
   CancellablePromise,
   Fn,
 } from './types';
-import { cancelSymbol } from './symbol';
 
 function applyMiddleware(middlewares: Middleware[], ctx: any) {
   return (value: any, promisify: Promisify, cancel: Promise<any>) => {
@@ -83,6 +82,7 @@ function factoryBase(...middleware: Middleware[]) {
       }
 
       cancel = (cresolve: Fn) => () => {
+        console.log('CALLED');
         try {
           iter.throw('1 generator was cancelled');
           /* cancels.forEach((fn: () => void) => {
