@@ -71,7 +71,6 @@ function factoryBase(...middleware: Middleware[]) {
     }
 
     let cancel: any = null;
-    // let cancels: any = [];
     // we wrap everything in a promise to avoid promise chaining,
     // which leads to memory leak errors.
     // see https://github.com/tj/co/issues/180
@@ -82,13 +81,8 @@ function factoryBase(...middleware: Middleware[]) {
       }
 
       cancel = (cresolve: Fn) => () => {
-        console.log('CALLED');
         try {
           iter.throw('1 generator was cancelled');
-          /* cancels.forEach((fn: () => void) => {
-            fn();
-          });
-          cancels = []; */
           reject({ error: '2 generator was cancelled' });
         } catch (err) {
           reject(err);
@@ -128,7 +122,6 @@ function factoryBase(...middleware: Middleware[]) {
       function next(ret: any) {
         const value = ret.value;
         if (ret.done) {
-          // cancels = [];
           return resolve(value);
         }
 
@@ -138,9 +131,6 @@ function factoryBase(...middleware: Middleware[]) {
           cancelPromise,
         );
         const promiseValue = promisify.call(ctx, taskValue);
-        /* if (promiseValue && promiseValue[cancelSymbol]) {
-          cancels.push(promiseValue[cancelSymbol]);
-        } */
 
         if (promiseValue && isPromise(promiseValue)) {
           return promiseValue.then(onFulfilled, onRejected);
