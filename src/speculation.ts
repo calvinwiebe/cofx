@@ -1,35 +1,33 @@
-var noop = function noop() {};
+type Fn = (...args: any[]) => void;
+
+const noop = () => {};
 
 // HOF Wraps the native Promise API
 // to add take a shouldCancel promise and add
 // an onCancel() callback.
-var speculation = function speculation(fn) {
-  // Don't cancel by default
-  var cancel =
-    arguments.length > 1 && arguments[1] !== undefined
-      ? arguments[1]
-      : Promise.reject();
-
+export default function speculation(fn: Fn, cancel = Promise.reject()) {
   return new Promise(function(_resolve, _reject) {
     // Track if the promise becomes resolved or rejected to
     // avoid invoking onCancel after a promise becomes isSettled.
-    var isSettled = false;
+    let isSettled = false;
 
     // When the callsite resolves, mark the promise as fulfilled.
-    var resolve = function resolve(input) {
+    const resolve = (input: any) => {
       isSettled = true;
       _resolve(input);
     };
 
     // When the callsite rejects, mark the promise as fulfilled.
-    var reject = function reject(input) {
+    const reject = (input: any) => {
       isSettled = true;
       _reject(input);
     };
 
-    var onCancel = function onCancel(handleCancel) {
-      var maybeHandleCancel = function(value) {
-        if (!isSettled) handleCancel(value);
+    const onCancel = (handleCancel: Fn) => {
+      const maybeHandleCancel = (value: any) => {
+        if (!isSettled) {
+          handleCancel(value);
+        }
       };
 
       return (
@@ -48,6 +46,4 @@ var speculation = function speculation(fn) {
 
     fn(resolve, reject, onCancel);
   });
-};
-
-module.exports = speculation;
+}
