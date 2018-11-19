@@ -1,4 +1,14 @@
-import { task, call, all, spawn, delay, factory, race } from '../src/index';
+import {
+  task,
+  call,
+  all,
+  spawn,
+  delay,
+  factory,
+  race,
+  fork,
+  // cancel,
+} from '../src/index';
 import fetch from 'node-fetch';
 import * as test from 'tape';
 import * as nock from 'nock';
@@ -119,6 +129,76 @@ test('task runtime cancel', (t) => {
   g.catch(console.log);
   g.cancel();
 });
+
+test('task fork should cancel', (t) => {
+  t.plan(1);
+
+  function* two() {
+    console.log('TWOOOO');
+    yield delay(10000);
+    console.log('THREE');
+  }
+
+  function* one() {
+    try {
+      console.log('PRE FORK');
+      yield fork(two);
+      console.log('POST FORK');
+      yield delay(10000);
+    } catch (err) {
+      t.equal(true, true);
+    }
+  }
+
+  const g = task(one);
+  g.catch(console.log);
+  setTimeout(() => {
+    g.cancel();
+  }, 200);
+});
+
+/* test('task spawn should not cancel', (t) => {
+  t.plan(2);
+
+  function* two() {
+    yield delay(10000);
+    console.log('HIT');
+    t.equal(true, true);
+  }
+
+  function* one() {
+    try {
+      yield spawn(two);
+    } catch (err) {
+      t.equal(true, true);
+    }
+  }
+
+  const g = task(one);
+  g.catch(console.log);
+  g.cancel();
+});
+
+test('task spawn cancel', (t) => {
+  t.plan(1);
+
+  function* two() {
+    yield delay(1000);
+  }
+
+  function* one() {
+    try {
+      yield spawn(two);
+      // yield cancel(task);
+    } catch (err) {
+      t.equal(true, true);
+    }
+  }
+
+  const g = task(one);
+  g.catch(console.log);
+  g.cancel();
+}); */
 
 test('call effect', (t) => {
   t.plan(1);

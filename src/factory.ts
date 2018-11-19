@@ -23,6 +23,8 @@ function factoryBase(...middleware: Middleware[]) {
    * and return a promise.
    */
   return function runtime<V>(gen: CoFn<V>, ...args: any[]) {
+    let cancel: any = null;
+    let cancelPromise: any = null;
     const ctx = this;
 
     function promisify(obj: any): Promise<any> {
@@ -70,7 +72,6 @@ function factoryBase(...middleware: Middleware[]) {
       }
     }
 
-    let cancel: any = null;
     // we wrap everything in a promise to avoid promise chaining,
     // which leads to memory leak errors.
     // see https://github.com/tj/co/issues/180
@@ -80,19 +81,23 @@ function factoryBase(...middleware: Middleware[]) {
         return resolve(iter);
       }
 
-      cancel = (cresolve: Fn) => () => {
-        try {
-          iter.throw('1 generator was cancelled');
-          reject({ error: '2 generator was cancelled' });
-        } catch (err) {
-          reject(err);
-        }
-        cresolve('cancel has been activated');
-      };
+      if (typeof cancel !== 'function') {
+        cancel = (cresolve: Fn) => () => {
+          console.log('CANCEL ACTIVATED');
+          try {
+            iter.throw('1 generator was cancelled');
+            reject({ error: '2 generator was cancelled' });
+          } catch (err) {
+            reject(err);
+          }
+          cresolve('cancel has been activated');
+          cancel = null;
+        };
 
-      const cancelPromise = new Promise((cresolve) => {
-        cancel = cancel(cresolve);
-      });
+        cancelPromise = new Promise((cresolve) => {
+          cancel = cancel(cresolve);
+        });
+      }
 
       onFulfilled(); // kickstart generator
 
