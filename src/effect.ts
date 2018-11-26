@@ -136,16 +136,11 @@ function forkEffect(
   cancelPromise: Promise<any>,
 ) {
   console.log('FORK EFFECT', cancelPromise);
-  return speculation((resolve, reject, onCancel) => {
-    const gen = fn.call(this, ...args);
-    promisify(gen).then(noop);
+  return speculation((resolve) => {
+    promisify(fn.call(this, ...args)).then(noop);
     console.log('RESOLVE');
     resolve();
     console.log('AFTER RESOLVE');
-    onCancel(() => {
-      console.log('FORK HAS BEEN CANCELLED');
-      reject('fork has been cancelled');
-    });
   }, cancelPromise);
 }
 
