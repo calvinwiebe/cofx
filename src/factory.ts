@@ -49,7 +49,7 @@ function runtime<V>({
 }: Runtime<V>) {
   const ctx = this;
 
-  function promisify(obj: any): Promise<any> {
+  function promisify(obj: any, useCancel: boolean = true): Promise<any> {
     if (!obj) return obj;
     if (isPromise(obj)) return obj;
     if (
@@ -57,11 +57,18 @@ function runtime<V>({
       isGeneratorFunction(obj) ||
       isGenerator(obj)
     ) {
-      console.log('another runtime');
-      return runtime.call(this, { fn: obj, cancel, cancelPromise, middleware });
+      if (useCancel) {
+        return runtime.call(this, {
+          fn: obj,
+          cancel,
+          cancelPromise,
+          middleware,
+        });
+      }
+      return runtime.call(this, { fn: obj, middleware });
     }
     if (Array.isArray(obj)) {
-      return Promise.all(obj.map(promisify));
+      return Promise.all(obj.map((o) => promisify(o)));
     }
     if (isObject(obj)) return objectToPromise.call(this, obj);
     return obj;

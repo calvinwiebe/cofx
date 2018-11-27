@@ -135,14 +135,17 @@ function forkEffect(
   promisify: Promisify,
   cancelPromise: Promise<any>,
 ) {
-  console.log('FORK EFFECT', cancelPromise);
   return speculation((resolve) => {
     promisify(fn.call(this, ...args)).then(noop);
-    console.log('RESOLVE');
     resolve();
-    console.log('AFTER RESOLVE');
   }, cancelPromise);
 }
+
+let counter = 0;
+const getId = () => {
+  counter += 1;
+  return counter;
+};
 
 const SPAWN = 'SPAWN';
 const spawn = (fn: CoFn, ...args: any[]) => ({ type: SPAWN, fn, args });
@@ -150,35 +153,36 @@ const isSpawn = typeDetector(SPAWN);
 function spawnEffect(
   { fn, args }: { fn: CoFn; args: any[] },
   promisify: Promisify,
-  cancelMap: Map<Promise<any>, Fn>,
+  cancelMap: Map<number, Fn>,
 ) {
+  const id = getId();
   let cancel: any = (resolve: Fn) => () => resolve('Spawn has been cancelled');
   const cancelPromise = new Promise((resolve) => {
     cancel = cancel(resolve);
   });
   const spec = speculation((resolve, reject, onCancel) => {
-    promisify(fn.call(this, ...args)).then(noop);
-    resolve();
+    promisify(fn.call(this, ...args), false).then(noop);
+    resolve(id);
     onCancel(() => {
       reject('spawn has been cancelled');
     });
   }, cancelPromise);
 
-  cancelMap.set(spec, cancel);
+  cancelMap.set(id, cancel);
+  console.log(cancelMap);
   return spec;
 }
 
 const CANCEL = 'CANCEL';
-const cancel = (fn: Promise<any>) => ({ type: CANCEL, fn });
+const cancel = (id: number) => ({ type: CANCEL, id });
 const isCancel = typeDetector(CANCEL);
-function cancelEffect(
-  { fn }: { fn: Promise<any> },
-  cancelMap: Map<Promise<any>, Fn>,
-) {
-  const cancel = cancelMap.get(fn);
+function cancelEffect({ id }: { id: number }, cancelMap: Map<number, Fn>) {
+  const cancel = cancelMap.get(id);
+  console.log(cancelMap);
+  console.log('TASK CANCEL', id, cancel);
   if (cancel) {
     cancel();
-    cancelMap.delete(fn);
+    cancelMap.delete(id);
   }
   return Promise.resolve();
 }
@@ -205,7 +209,7 @@ function effectHandler(
   effect: Effect,
   promisify: Promisify,
   cancelPromise: Promise<any>,
-  cancelMap: Map<Promise<any>, Fn>,
+  cancelMap: Map<number, Fn>,
 ) {
   const ctx = this;
   if (isCall(effect))
@@ -223,6 +227,7 @@ function effectHandler(
 
 function effectMiddleware(next: NextFn) {
   const cancelMap = new Map();
+  console.log('CANCEL MAPPPP', next);
 
   return (
     effect: Effect,

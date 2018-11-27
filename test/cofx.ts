@@ -7,7 +7,7 @@ import {
   factory,
   race,
   fork,
-  // cancel,
+  cancel,
 } from '../src/index';
 import fetch from 'node-fetch';
 import * as test from 'tape';
@@ -48,7 +48,7 @@ test('task runtime call generator', (t) => {
 
   t.plan(1);
   task(two)
-    .then((data) => {
+    .then((data: any) => {
       t.equal(data, 'hi');
     })
     .catch(console.error);
@@ -60,7 +60,7 @@ test('task runtime call a normal function', (t) => {
     return 'hi';
   }
 
-  task(one).then((data) => {
+  task(one).then((data: any) => {
     t.equal(data, 'hi');
   });
 });
@@ -75,7 +75,7 @@ test('task runtime call effect normal function', (t) => {
     return result;
   }
 
-  task(two).then((data) => {
+  task(two).then((data: any) => {
     t.equal(data, 'hi');
   });
 });
@@ -90,7 +90,7 @@ test('task runtime all effect array', (t) => {
     return result;
   }
 
-  task(two).then((data) => {
+  task(two).then((data: any) => {
     t.deepEqual(data, ['hi', 'hi']);
   });
 });
@@ -108,7 +108,7 @@ test('task runtime all effect object', (t) => {
     return result;
   }
 
-  task(two).then((data) => {
+  task(two).then((data: any) => {
     t.deepEqual(data, { one: 'hi', two: 'hi' });
   });
 });
@@ -177,28 +177,25 @@ test('task fork should cancel', (t) => {
   const g = task(one);
   g.catch(console.log);
   g.cancel();
-});
+}); */
 
 test('task spawn cancel', (t) => {
   t.plan(1);
 
   function* two() {
-    yield delay(1000);
+    yield delay(10000);
   }
 
   function* one() {
-    try {
-      yield spawn(two);
-      // yield cancel(task);
-    } catch (err) {
-      t.equal(true, true);
-    }
+    const task = yield spawn(two);
+    console.log('TASK', task);
+    yield delay(500);
+    yield cancel(task);
   }
 
   const g = task(one);
   g.catch(console.log);
-  g.cancel();
-}); */
+});
 
 test('call effect', (t) => {
   t.plan(1);
