@@ -10,6 +10,7 @@ test('co(* -> yield []) should aggregate several promises', (t) => {
     const c = read('package.json', 'utf8');
 
     const res = yield [b, c];
+    console.log(res);
     t.equal(2, res.length);
     t.ok(~res[0].indexOf('MIT'));
     t.ok(~res[1].indexOf('devDependencies'));

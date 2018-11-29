@@ -10,6 +10,7 @@ import {
 
 function applyMiddleware(middlewares: Middleware[], ctx: any) {
   return (value: any, promisify: Promisify, cancel: Promise<any>) => {
+    console.log('VALUE', value);
     const n = (effect: any) => effect;
     const compose = (acc: NextFn, md: Middleware) => md.call(ctx, acc);
     const chain = middlewares.reduce(compose, n);
@@ -22,10 +23,12 @@ interface Runtime<V> {
   args: any[];
   cancel: any;
   cancelPromise: any;
-  middleware: Middleware[];
+  middleware: (...args: any[]) => any;
 }
 
-function factoryBase(...middleware: Middleware[]) {
+function factoryBase(...md: Middleware[]) {
+  const middleware = applyMiddleware(md, this);
+
   return function externalRuntime<V>(gen: CoFn<V>, ...args: any[]) {
     const ctx = this;
     return runtime.call(ctx, {
@@ -134,6 +137,7 @@ function runtime<V>({
     onFulfilled(); // kickstart generator
 
     function onFulfilled(res?: any) {
+      console.log(res);
       try {
         const ret = iter.next(res);
         next(ret);
@@ -162,11 +166,8 @@ function runtime<V>({
         return resolve(value);
       }
 
-      const taskValue = applyMiddleware(middleware, ctx)(
-        value,
-        promisify,
-        cancelPromise,
-      );
+      const taskValue = middleware(value, promisify, cancelPromise);
+      console.log(taskValue);
       const promiseValue = promisify.call(ctx, taskValue);
 
       if (promiseValue && isPromise(promiseValue)) {

@@ -229,9 +229,8 @@ function effectMiddleware(next: NextFn) {
   const cancelMap = new Map();
   console.log('CANCEL MAPPPP', next);
 
-  return (
+  return (promisify: Promisify) => (
     effect: Effect,
-    promisify: Promisify,
     cancelPromise: Promise<any>,
   ) => {
     const nextEffect = effectHandler(

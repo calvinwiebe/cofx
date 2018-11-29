@@ -30,10 +30,8 @@ export type Promisify = (p: any, useCancel?: boolean) => Promise<any>;
 export type Middleware = (
   next: NextFn,
 ) => (
-  effect: Effect,
   promisify: Promisify,
-  cancelPromise: Promise<any>,
-) => Middleware;
+) => (effect: Effect, cancelPromise: Promise<any>) => Middleware;
 export interface HiddenCancellablePromise<T> extends Promise<T> {
   [cancelSymbol]?: (...args: any[]) => void;
 }
